@@ -1,5 +1,5 @@
 from unittest import TestCase, main 
-from kopycat.kopycat import Kopy, CLI
+from kopy.kopy import Kopy, CLI
 from base64 import b64encode, b64decode
 
 class KopyTest(TestCase):

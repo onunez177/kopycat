@@ -99,14 +99,14 @@ https://www.openssl.org/docs/crypto/EVP_BytesToKey.html
 ## Quirks
 
 * kopy.io doesn't care if you give a paste a > 1mo lifetime
-* kopy.io wi store any data you POST to its API -- even if the paste is malformed,
+* kopy.io will store any data you POST to its API -- even if the paste is malformed,
   or a parameter isn't used by the app.
-** kopy.io was forked from Hastebin -- they added crypto to the UI, and a
-   form -> JSON parser. But in Hastebin, anything you POST'd to /documents _was_
-   your paste, verbatim.
-** This means a few things:
-*** Steganography -- our real paste is in the metadata!
-*** We can use custom metadata to specify different ciphers
+  * My theory is this is a holdover from Hastebin, where anything you POST to
+   /documents is your paste verbatim
+  * This means a few things:
+    * A successful response doesn't mean a successful paste
+    * Steganography -- our real paste is in the metadata!
+    * We can use custom metadata to specify different ciphers
 
 ## Languages
 

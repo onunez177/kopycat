@@ -7,7 +7,7 @@ from base64 import b64encode, b64decode
 from getpass import getpass
 from hashlib import md5
 from random import SystemRandom
-from simplejson import loads
+from simplejson import loads, dumps
 from requests import get, post 
 from Crypto.Cipher import AES
 
@@ -17,8 +17,7 @@ class Kopy(object):
     Implementation of the kopy.io API
     """
 
-    url = "https://kopy.io/"
-    apiEndpoint = "documents"
+    url = "https://kopy.io/documents/"
     verifyCert = False # kopy uses an invalid cert :'(
 
     keyLength = 256 / 8
@@ -29,6 +28,11 @@ class Kopy(object):
 
     saltPadding = "Salted__" # this is half a block, and the salt is half a block
     ciphertextFormat = saltPadding + "{salt}{ciphertext}" # this is then b64'd
+
+    documentFormat = {"data":None, "security":None, "keep":None}.copy
+    # note that documentFormat is a method
+    # TODO put in some intelligent defaults, like a scheme, maybe a user-agent
+    # to declare a paste was made with kopycat. Then again, maybe not.
 
     def __init__(self):
 
@@ -79,13 +83,53 @@ class Kopy(object):
         return self.opensslKeyDerivation(passphrase, salt,
                                         self.keyLength, self.ivLength)
 
-    def _postDocument(self, document, encryption=False):
+    # FIXME the methods to interact with the API have 0 error handling.
+    # The also don't have tests.
 
-        pass
+    def _composeDocument(self, document, encryption, keep):
+        """
+        Create a dictionary to represent the document, for requests.post()'s
+        "data" parameter.
+        """
+
+        output = self.documentFormat()
+        output["data"] = document
+        output["keep"] = keep
+        output["security"] = "encrypted" if encryption else "default"
+
+        return output
+
+    def _parseDocument(self, json):
+        """
+        Parse a JSON string into a native Python datastructure.
+        """
+
+        output = loads(json)
+        return output
+
+    def _postDocument(self, document, encryption=False, keep=600):
+        """
+        Send a request to the API to create a new document, and keep it for a
+        certain number of seconds.
+        Returns a dictionary with a "key" element, containing the new document's
+        identifier.
+        """
+
+        return self._parseDocument(post(self.url, verify=self.verifyCert,
+                                  data=self._composeDocument(document, encryption,
+                                  keep)).content)
 
     def _getDocument(self, documentId):
+        """
+        Retrieve a document from the API.
+        Returns a dictionary with the document's metadata. The "data" element
+        will contain the actual document; the "security" element will tell you
+        if its encrypted (a value of "default" means plaintext, otherwise its
+        value will be "encrypted").
+        """
 
-        pass
+        return self._parseDocument(get(self.url + documentId,
+                                  verify=self.verifyCert).content)
 
     def _pad(self, message):
         """
@@ -121,7 +165,7 @@ class Kopy(object):
         If no salt is given, a salt is generated; this is probably what you want.
         """
 
-        if not salt: salt = self.generateSalt()
+        if not salt: salt = self._generateSalt()
         key, iv = self._getAESArgs(passphrase, salt)
         document = self._pad(document)
 
@@ -176,10 +220,3 @@ class Kopy(object):
     def retrieveDocument(self, documentId):
 
         pass
-
-class CLI(Kopy):
-
-    pass
-
-#def main():
-#    CLI().main()
