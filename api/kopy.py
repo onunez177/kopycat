@@ -34,6 +34,9 @@ class Kopy(object):
     # TODO put in some intelligent defaults, like a scheme, maybe a user-agent
     # to declare a paste was made with kopycat. Then again, maybe not.
 
+    docNotFound = "Document not found."
+    cryptoSchemes = ["default", "encrypted"]
+
     def __init__(self):
 
         self.randomness = SystemRandom()
@@ -111,6 +114,7 @@ class Kopy(object):
         """
         Send a request to the API to create a new document, and keep it for a
         certain number of seconds.
+
         Returns a dictionary with a "key" element, containing the new document's
         identifier.
         """
@@ -122,14 +126,24 @@ class Kopy(object):
     def _getDocument(self, documentId):
         """
         Retrieve a document from the API.
-        Returns a dictionary with the document's metadata. The "data" element
-        will contain the actual document; the "security" element will tell you
-        if its encrypted (a value of "default" means plaintext, otherwise its
-        value will be "encrypted").
+
+        Returns a dictionary with the document's metadata.
+        If the document was found, the "data" element will contain the actual
+        document; the "security" element will tell you if its encrypted
+        (a value of "default" means plaintext, otherwise its value will be
+        "encrypted").
+        If the document was not found, it will have a "message" element with the
+        value "Document not found."
         """
 
-        return self._parseDocument(get(self.url + documentId,
-                                  verify=self.verifyCert).content)
+        document = get(self.url + documentId, verify=self.verifyCert)
+        if not document.status_code in [200, 404]: 
+            raise Exception("Failed to retrieve document due to unkown error.")
+        if not ("content-type" in document.headers and \
+                document.headers["content-type"] == "application/json"):
+            raise Exception("Document has invalid content-type.")
+        else:
+            return self._parseDocument(document.text)
 
     def _pad(self, message):
         """
@@ -213,10 +227,52 @@ class Kopy(object):
             dtot += d[-1]
         return dtot[:key_len], dtot[key_len:key_len+iv_len]
 
-    def createDocument(self, document):
+    def createDocument(self, document, passphrase=None, keep=600):
+        """
+        Puts a document on kopy.io, and returns its identifier. If a passphrase
+        is given, the document will be encrypted. The document will expire after
+        "keep" seconds.
+        """
 
-        pass
+        if passphrase != None: document = self.encrypt(document, passphrase)
+        identifier = self._postDocument(document,
+                                       encryption = (passphrase != None),
+                                       keep=keep)
+        if not "key" in identifier:
+            raise Exception("An unknown error occured.")
+        return identifier["key"]
 
-    def retrieveDocument(self, documentId):
+    def retrieveDocument(self, documentId, passphrase=None):
+        """
+        Gets a document from kopy.io, decrypts it if its encrypted, and returns
+        it as a dictionary. The actual document will be in the "data" element.
+        """
+        document = self._getDocument(documentId)
 
-        pass
+        # 404s
+        if "message" in document and document["message"] == self.docNotFound:
+            if "data" in document:
+                raise Exception("kopy.io said document was not found; however," + \
+                    " document contained value of '{}'.".format(document["data"]))
+            else:
+                raise Exception("Document was not found.")
+
+        # Malformed documents
+        if not "data" in document:
+            raise Exception("Document contained no data.")
+
+        # Handle encryption
+        if "security" in document:
+            if not document["security"] in self.cryptoSchemes:
+                raise Exception("Document uses unknown encryption.")
+            elif document["security"] == "encrypted":
+                if passphrase == None:
+                    raise Exception("Document is encrypted, but no passphrase" + \
+                                    "was given.")
+                else: # Encryption
+                    document["data"] = self.decrypt(document["data"], passphrase)
+
+            elif document["security"] == "default": # Plain text
+                pass
+
+        return document
