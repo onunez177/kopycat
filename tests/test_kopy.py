@@ -1,4 +1,4 @@
-from unittest import TestCase, main 
+from unittest import TestCase 
 from api.kopy import Kopy
 from base64 import b64encode, b64decode
 
@@ -124,9 +124,3 @@ class KopyTest(TestCase):
         self.assertEqual(len(self.k._generateSalt()), 8)
 
     # TODO set up mocks to test HTTP components
-
-class CLITest(TestCase):
-
-    pass
-
-if __name__ == "__main__": main()

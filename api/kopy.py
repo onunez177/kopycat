@@ -2,9 +2,7 @@
 Library and utility to interact with kopy.io's API.
 """
 
-import argparse
 from base64 import b64encode, b64decode
-from getpass import getpass
 from hashlib import md5
 from random import SystemRandom
 from simplejson import loads, dumps
