@@ -5,6 +5,8 @@ from sys import stdin, exit
 from getpass import getpass
 from api.kopy import Kopy
 
+# Everything actually interesting happens in api/kopy.py
+
 class CLI(Kopy):
 
     urlFormat = "https://kopy.io/{documentId}#{passphrase}"
@@ -49,6 +51,7 @@ https://www.github.com/xmnr/kopycat
 """
 
     def _chopProtocol(self, url):
+        """ Remove the protocol from a URL. """
 
         if url.startswith("http://"): url=url[len("http://"):]
         elif url.startswith("https://"): url=url[len("https://"):]
@@ -56,11 +59,14 @@ https://www.github.com/xmnr/kopycat
         return url
 
     def kopyUrl(self, t):
+        """ Returns True if t is a URL pointing to kopy.io. """
 
         t = self._chopProtocol(t)
         return t.startswith("kopy.io")
+        # FIXME will also match files that start with kopy.io
 
     def parseUrl(self, url):
+        """ Split a kopy.io URL into the documentId and passphrase (if any.) """
 
         url = self._chopProtocol(url)
 
@@ -100,7 +106,7 @@ https://www.github.com/xmnr/kopycat
         return self.retrieveDocument(documentId, passphrase)["data"]
 
     def outputDocument(self, document):
-
+        
         print document
         exit(0)
 
@@ -152,10 +158,6 @@ https://www.github.com/xmnr/kopycat
         return parser.parse_args(), parser.print_help
 
     def main(self):
-
-        # FIXME doesn't try to validate arguments make sense, ie, doesn't check
-        # if you're using --download and --encrypt together.
-        # Also doesn't catch an errors.
 
         arguments, usage = self.arguments()
 

@@ -24,9 +24,9 @@ class CLITest(TestCase):
 
     def testChop(self):
 
-        self.assertEqual(self.c.chopProtocol("http://google.com"), "google.com")
-        self.assertEqual(self.c.chopProtocol("https://google.com"), "google.com")
-        self.assertEqual(self.c.chopProtocol("google.com"), "google.com")
+        self.assertEqual(self.c._chopProtocol("http://google.com"), "google.com")
+        self.assertEqual(self.c._chopProtocol("https://google.com"), "google.com")
+        self.assertEqual(self.c._chopProtocol("google.com"), "google.com")
 
     def testUrlFormat(self):
 
