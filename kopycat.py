@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 import argparse
-from sys import stdin, exit
+from sys import stdin, stderr, exit
 from getpass import getpass
 from api.kopy import Kopy
 
@@ -50,6 +50,23 @@ Bugs? Feature requests? Contributions?
 https://www.github.com/xmnr/kopycat
 """
 
+    times = {"m":60, "h":3600, "d":86400}
+    # seconds in a minute, hour, and day 
+
+    def _succeed(self, message):
+        """ Output to stdout and signal success. """
+
+        print message
+        exit(0)
+
+    def _fail(self, message="", n=None):
+        """ Output to stderr and signal failure. """
+
+        # TODO: I could just import print_function from future....
+        if not message.endswith("\n"): message += "\n"
+        stderr.write(message)
+        exit(n or 1)
+
     def _chopProtocol(self, url):
         """ Remove the protocol from a URL. """
 
@@ -58,12 +75,25 @@ https://www.github.com/xmnr/kopycat
 
         return url
 
-    def kopyUrl(self, t):
+    def kopyUrl(self, target):
         """ Returns True if t is a URL pointing to kopy.io. """
 
-        t = self._chopProtocol(t)
-        return t.startswith("kopy.io")
+        target = self._chopProtocol(target)
+        return target.startswith("kopy.io")
         # FIXME will also match files that start with kopy.io
+
+    def parseTime(self, t):
+        """
+        Convert a human-friendly representation of time, such as 1d, to seconds.
+        """
+
+        unit = t[-1]
+        quantity = int(t[:-1])
+
+        if not unit in self.times:
+            raise Exception("Unknown unit of time.")
+
+        return self.times[unit] * quantity
 
     def parseUrl(self, url):
         """ Split a kopy.io URL into the documentId and passphrase (if any.) """
@@ -95,8 +125,7 @@ https://www.github.com/xmnr/kopycat
         try:
             document = open(filename, "r").read()
         except:
-            print "Could not open file."
-            exit(1)
+            self._fail("Could not open file.")
         
         # TODO more error handling
         return self.createDocument(document, passphrase, keep)
@@ -107,13 +136,11 @@ https://www.github.com/xmnr/kopycat
 
     def outputDocument(self, document):
         
-        print document
-        exit(0)
+        self._succeed(document)
 
     def outputUrl(self, documentId, passphrase=None):
 
-        print self.formatUrl(documentId, passphrase)
-        exit(0)
+        self._succeed(self.formatUrl(documentId, passphrase))
 
     def prompt(self):
 
@@ -127,6 +154,10 @@ https://www.github.com/xmnr/kopycat
         return passphrase
 
     def arguments(self):
+        """
+        Configure and parse arguments.
+        Returns arguments and usage function.
+        """
 
         parser = argparse.ArgumentParser(description=self.description,
                                         epilog=self.examples,
@@ -151,52 +182,73 @@ https://www.github.com/xmnr/kopycat
                             action="store_true", help="Generate a random " + \
                             "passphrase from the system's random device. " + \
                             "(Implies -u.)")
+        parser.add_argument("-t", "--time", default=False,
+                            help="Amount of time to keep document; specify a " + \
+                            "number and a unit, either (m)inutes, (h)ours or " + \
+                            "(d)ays. (For example, -t 5m.)")
         parser.add_argument("-k", "--keep", type=int, default=600,
                             help="Number of seconds to store the document. " + \
                             "(Default is 600, or 10 minites.)") 
+        parser.add_argument("--debug", default=False, action="store_true",
+                            help="Dump exceptions to the terminal.")
 
         return parser.parse_args(), parser.print_help
 
+    # TODO fail in a more friendly way; catch exceptions and output useful
+    # error messages. Build --debug into self._fail, not self._main.
     def main(self):
 
-        arguments, usage = self.arguments()
+        try:
 
-        # Fetching the passphrase
+            arguments, usage = self.arguments()
 
-        passphrase = None
+            # Parse time
 
-        if arguments.stdin:
-            passphrase = stdin.read()
-        elif arguments.passphrase_file:
-            passphrase = open(arguments.passphrase_file).read()
-        elif arguments.generate_passphrase:
-            passphrase = self.generatePassword()
-            arguments.sharable = True
-        elif arguments.encryption:
-            # Requires passphrase but none specified
-            passphrase = self.prompt()
+            if arguments.time:
+                arguments.keep = self.parseTime(arguments.time)
 
-        if passphrase and arguments.strip:
-            passphrase = passphrase.strip()
+            # Fetching the passphrase
 
-        # Executing the user's request
-        if arguments.target:
-            if self.kopyUrl(arguments.target):
-                documentId, p = self.parseUrl(arguments.target)
-                if p != None: passphrase = p # Should we print a warning?
-                self.outputDocument(self.download(documentId, passphrase))
+            passphrase = None
+
+            if arguments.stdin:
+                passphrase = stdin.read()
+            elif arguments.passphrase_file:
+                passphrase = open(arguments.passphrase_file).read()
+            elif arguments.generate_passphrase:
+                passphrase = self.generatePassword()
+                arguments.sharable = True
+            elif arguments.encryption:
+                # Requires passphrase but none specified
+                passphrase = self.prompt()
+
+            if passphrase and arguments.strip:
+                passphrase = passphrase.strip()
+
+            # Executing the user's request
+            if arguments.target:
+                if self.kopyUrl(arguments.target):
+                    documentId, p = self.parseUrl(arguments.target)
+                    if p != None: passphrase = p # Should we print a warning?
+                    self.outputDocument(self.download(documentId, passphrase))
+                else:
+                    self.outputUrl(self.upload(arguments.target, passphrase,
+                                               arguments.keep),
+                                               passphrase if arguments.sharable else None)
+            elif arguments.download:
+                self.outputDocument(self.download(arguments.download, passphrase))
+
+            # Nothing to do
             else:
-                self.outputUrl(self.upload(arguments.target, passphrase,
-                                           arguments.keep),
-                                           passphrase if arguments.sharable else None)
-        elif arguments.download:
-            self.outputDocument(self.download(arguments.download, passphrase))
 
-        # Nothing to do
-        else:
+                usage()
+                self._fail()
 
-            usage()
-            exit(1)
+        except Exception as e:
+        # Catch exceptions so that we don't dump them on shell scripts
+            
+            if arguments.debug: print e
+            self._fail("An error occured.")
 
 if __name__ == "__main__":
     CLI().main()

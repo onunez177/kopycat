@@ -3,12 +3,10 @@ Roadmap
 
 ## Upcoming features and issues
 
+* Clean up CLI code (API code is much nicer)
 * More shell-script friendly failure conditions are the priority.
 * Research Python cryptographic libraries, and migrate kopycat to the one which
   appears to be the most secure.
-* Add a more intuitive way of specifying the period of time a documet should be
-  up for, ie, if I want the document to stay up for one day, I shouldn't have
-  to calculate the propper number of seconds; I should be able to say, 1d
 * Add mocks to test HTTP requests
 
 ## Under consideration

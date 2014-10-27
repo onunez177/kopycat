@@ -7,6 +7,21 @@ class CLITest(TestCase):
 
     # TODO type-checking and HTTP mocks (same goes for api/kopy.py)
 
+    def testTime(self):
+
+        self.assertEqual(self.c.parseTime("1m"), 60)
+        self.assertEqual(self.c.parseTime("5m"), 5*60)
+        self.assertEqual(self.c.parseTime("1h"), 3600)
+        self.assertEqual(self.c.parseTime("100h"), 100*3600)
+        self.assertEqual(self.c.parseTime("1d"), 86400)
+        self.assertEqual(self.c.parseTime("365d"), 365*86400)
+
+        self.assertRaises(Exception, self.c.parseTime, "10y")
+        self.assertRaises(Exception, self.c.parseTime, "")
+        self.assertRaises(Exception, self.c.parseTime, "m")
+        self.assertRaises(Exception, self.c.parseTime, "1")
+        self.assertRaises(Exception, self.c.parseTime, "1min")
+
     def testUrlParse(self):
 
         self.assertEqual(self.c.parseUrl("https://kopy.io/12345"), ("12345", None))
