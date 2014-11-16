@@ -245,6 +245,7 @@ class Kopy(object):
         Gets a document from kopy.io, decrypts it if its encrypted, and returns
         it as a dictionary. The actual document will be in the "data" element.
         """
+
         document = self._getDocument(documentId)
 
         # 404s
@@ -266,7 +267,7 @@ class Kopy(object):
             elif document["security"] == "encrypted":
                 if passphrase == None:
                     raise Exception("Document is encrypted, but no passphrase" + \
-                                    "was given.")
+                                    " was given.")
                 else: # Encryption
                     document["data"] = self.decrypt(document["data"], passphrase)
 

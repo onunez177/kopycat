@@ -3,7 +3,8 @@ from kopycat import CLI
 
 class CLITest(TestCase):
 
-    c = CLI()
+    def setUp(self):
+        self.c = CLI()
 
     # TODO type-checking and HTTP mocks (same goes for api/kopy.py)
 

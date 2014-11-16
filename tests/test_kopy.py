@@ -6,13 +6,14 @@ class KopyTest(TestCase):
 
     # TODO theres no checks for inputs of the wrong type.
 
-    plaintext = "attack at dawn"
-    ciphertext = "U2FsdGVkX1/XnDGaEACaoTEhm7YsBicuJNgLrFSMKe0="
-    passphrase = "9ACJQzDPFiVJXC"
-    salt = '\xd7\x9c1\x9a\x10\x00\x9a\xa1' 
+    def setUp(self):
+        self.plaintext = "attack at dawn"
+        self.ciphertext = "U2FsdGVkX1/XnDGaEACaoTEhm7YsBicuJNgLrFSMKe0="
+        self.passphrase = "9ACJQzDPFiVJXC"
+        self.salt = '\xd7\x9c1\x9a\x10\x00\x9a\xa1' 
 
-    k = Kopy()
-    s = "Salted__"
+        self.k = Kopy()
+        self.s = "Salted__"
 
     def testPadding(self):
 

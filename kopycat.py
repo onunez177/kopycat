@@ -43,8 +43,8 @@ View a link securely:
 
 Upload a file to kopy.io:
 
-    kopycat /path/to/file.txt
-    kopycat /path/to/sensitive/file.txt -g 
+    kopycat /path/to/file.txt # Will be stored plaintext
+    kopycat /path/to/sensitive/file.txt -g # Generates a passphrase 
 
 Bugs? Feature requests? Contributions?
 https://www.github.com/xmnr/kopycat
@@ -59,7 +59,7 @@ https://www.github.com/xmnr/kopycat
         print message
         exit(0)
 
-    def _fail(self, message="", n=None):
+    def _fail(self, error, n=None):
         """ Output to stderr and signal failure. """
 
         # TODO: I could just import print_function from future....
@@ -75,8 +75,17 @@ https://www.github.com/xmnr/kopycat
 
         return url
 
+    def _getDocument(self, target):
+
+        if not target: return stdin.read()
+        else: return open(target).read()
+
     def kopyUrl(self, target):
         """ Returns True if t is a URL pointing to kopy.io. """
+
+        if not target: return False
+        # slightly hacky way to make it pipe friendly; if we're being piped,
+        # target will be False
 
         target = self._chopProtocol(target)
         return target.startswith("kopy.io")
@@ -88,7 +97,7 @@ https://www.github.com/xmnr/kopycat
         """
 
         unit = t[-1]
-        quantity = int(t[:-1])
+        quantity = int(t[:-1]) # TODO error handling here
 
         if not unit in self.times:
             raise Exception("Unknown unit of time.")
@@ -120,16 +129,6 @@ https://www.github.com/xmnr/kopycat
         return self.urlFormat.format(documentId=documentId,
                                     passphrase=passphrase or "")
 
-    def upload(self, filename, passphrase, keep):
-
-        try:
-            document = open(filename, "r").read()
-        except:
-            self._fail("Could not open file.")
-        
-        # TODO more error handling
-        return self.createDocument(document, passphrase, keep)
-
     def download(self, documentId, passphrase):
 
         return self.retrieveDocument(documentId, passphrase)["data"]
@@ -152,6 +151,11 @@ https://www.github.com/xmnr/kopycat
                 print "Confirmation failed."
 
         return passphrase
+
+    def parseTarget(self, target):
+
+        if not target:
+            return sys.stdin.read()
 
     def arguments(self):
         """
@@ -207,7 +211,7 @@ https://www.github.com/xmnr/kopycat
             if arguments.time:
                 arguments.keep = self.parseTime(arguments.time)
 
-            # Fetching the passphrase
+            # Fetch or parse passphrase
 
             passphrase = None
 
@@ -226,24 +230,22 @@ https://www.github.com/xmnr/kopycat
                 passphrase = passphrase.strip()
 
             # Executing the user's request
-            if arguments.target:
-                if self.kopyUrl(arguments.target):
-                    documentId, p = self.parseUrl(arguments.target)
-                    if p != None: passphrase = p # Should we print a warning?
-                    self.outputDocument(self.download(documentId, passphrase))
-                else:
-                    self.outputUrl(self.upload(arguments.target, passphrase,
-                                               arguments.keep),
-                                               passphrase if arguments.sharable else None)
-            elif arguments.download:
+
+            if arguments.download:
                 self.outputDocument(self.download(arguments.download, passphrase))
 
-            # Nothing to do
             else:
-
-                usage()
-                self._fail()
-
+                if self.kopyUrl(arguments.target):
+                    documentId, p = self.parseUrl(arguments.target)
+                    if p != None: passphrase = p
+                    # Should we print a warning if we overwrite password?
+                    self.outputDocument(self.download(documentId, passphrase))
+                else:
+                    document = self._getDocument(arguments.target)
+                    self.outputUrl(self.createDocument(document,
+                                                       passphrase,
+                                                       arguments.keep),
+                                   passphrase if arguments.sharable else None)
         except Exception as e:
         # Catch exceptions so that we don't dump them on shell scripts
             
