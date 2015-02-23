@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import argparse
+import errno
 from sys import stdin, stderr, exit
 from getpass import getpass
 from api.kopy import Kopy
@@ -9,6 +10,7 @@ from api.kopy import Kopy
 
 class CLI(Kopy):
 
+    _kopyUrl = "kopy.io"
     urlFormat = "https://kopy.io/{documentId}#{passphrase}"
     # Should urlFormat support http:// too?
 
@@ -51,7 +53,10 @@ https://www.github.com/xmnr/kopycat
 """
 
     times = {"m":60, "h":3600, "d":86400}
-    # seconds in a minute, hour, and day 
+    # Lookup table for translating to seconds
+    # minute, hour, day respectively
+
+    # Internals
 
     def _succeed(self, message):
         """ Output to stdout and signal success. """
@@ -59,7 +64,7 @@ https://www.github.com/xmnr/kopycat
         print message
         exit(0)
 
-    def _fail(self, error, n=None):
+    def _fail(self, message, n=None):
         """ Output to stderr and signal failure. """
 
         # TODO: I could just import print_function from future....
@@ -70,26 +75,57 @@ https://www.github.com/xmnr/kopycat
     def _chopProtocol(self, url):
         """ Remove the protocol from a URL. """
 
-        if url.startswith("http://"): url=url[len("http://"):]
-        elif url.startswith("https://"): url=url[len("https://"):]
+        protocols = map(lambda a: a + "://", ["http", "https"])
+        cont = True
+
+        while cont:
+            # The while loop is to ensure nested protocols are stripped, ie,
+            # http://https://http://host.domain
+            # Otherwise, the behavior is inconsistent, and based on the ordering
+            # of protocols, which is bothersome and may lead to DoS.
+
+            # Theres probably a more elegant solution for this.
+
+            cont = False
+            for p in protocols:
+                if url.startswith(p):
+                    url = url[len(p):]
+                    cont = True # check again for nested protocols
 
         return url
 
-    def _getDocument(self, target):
+    def _getFile(self, target):
 
-        if not target: return stdin.read()
-        else: return open(target).read()
+        if not isinstance(target, str): raise Exception("Bad argument (this is a bug.)")
+
+        dangerous = ["\r", "\n", "\x00"]
+        # \r and \n can be used to fake log entries, \x00 can be used to bypass
+        # filters. I know \r and \n are valid filenames in extfs, they probably
+        # aren't on other systems.
+
+        for i in target:
+            if i in dangerous:
+                raise Exception("Filename was potentially malicious, aborting.")
+
+        try:
+            doc = open(target).read()
+        except IOError as e:
+            if e.errno == errno.EACCES:
+                raise Exception("You don't have permission to read {}.".format(target))
+            elif e.errno == errno.ENOENT:
+                raise Exception("The file {} doesn't exist.".format(target))
+            elif e.errno == errno.EISDIR:
+                raise Exception("{} is a directory.".format(target))
+            # TODO should we fail on symlinks unless explicitly allowed?
+
+        return doc
 
     def kopyUrl(self, target):
         """ Returns True if t is a URL pointing to kopy.io. """
 
-        if not target: return False
-        # slightly hacky way to make it pipe friendly; if we're being piped,
-        # target will be False
-
         target = self._chopProtocol(target)
-        return target.startswith("kopy.io")
-        # FIXME will also match files that start with kopy.io
+        return target.startswith(self._kopyUrl)
+        # FIXME convert to regex
 
     def parseTime(self, t):
         """
@@ -97,10 +133,16 @@ https://www.github.com/xmnr/kopycat
         """
 
         unit = t[-1]
-        quantity = int(t[:-1]) # TODO error handling here
+        quantity = t[:-1]
+
+        try:
+            quantity = int(quantity) 
+        except ValueError:
+            raise Exception("Invalid paste duration: " + \
+                            "{} is not a number.".format(quantity))
 
         if not unit in self.times:
-            raise Exception("Unknown unit of time.")
+            raise Exception("Unknown unit of time: {}.".format(unit))
 
         return self.times[unit] * quantity
 
@@ -129,6 +171,8 @@ https://www.github.com/xmnr/kopycat
         return self.urlFormat.format(documentId=documentId,
                                     passphrase=passphrase or "")
 
+    # Functionality
+
     def download(self, documentId, passphrase):
 
         return self.retrieveDocument(documentId, passphrase)["data"]
@@ -142,6 +186,9 @@ https://www.github.com/xmnr/kopycat
         self._succeed(self.formatUrl(documentId, passphrase))
 
     def prompt(self):
+        """ Prompt user for a passphrase. """
+
+        # this could really go in internals or functionality.
 
         passphrase, confirm = True, False
         while passphrase != confirm:
@@ -152,10 +199,7 @@ https://www.github.com/xmnr/kopycat
 
         return passphrase
 
-    def parseTarget(self, target):
-
-        if not target:
-            return sys.stdin.read()
+    # Command liney-ness
 
     def arguments(self):
         """
@@ -216,6 +260,8 @@ https://www.github.com/xmnr/kopycat
             passphrase = None
 
             if arguments.stdin:
+                if not arguments.target:
+                    raise Exception("target must be specified when using --stdin.")
                 passphrase = stdin.read()
             elif arguments.passphrase_file:
                 passphrase = open(arguments.passphrase_file).read()
@@ -224,10 +270,16 @@ https://www.github.com/xmnr/kopycat
                 arguments.sharable = True
             elif arguments.encryption:
                 # Requires passphrase but none specified
+                # FIXME catch cases where this causes problems for pipes?
                 passphrase = self.prompt()
 
             if passphrase and arguments.strip:
                 passphrase = passphrase.strip()
+
+            # Fetch piped documents
+            document = None
+            if not arguments.target:
+                document = stdin.read()
 
             # Executing the user's request
 
@@ -241,14 +293,19 @@ https://www.github.com/xmnr/kopycat
                     # Should we print a warning if we overwrite password?
                     self.outputDocument(self.download(documentId, passphrase))
                 else:
-                    document = self._getDocument(arguments.target)
+                    if document == None: # document is a file
+                        # There shouldn't be a way for target to be None
+                        # here.
+                        document = self._getFile(arguments.target)
                     self.outputUrl(self.createDocument(document,
                                                        passphrase,
                                                        arguments.keep),
                                    passphrase if arguments.sharable else None)
         except Exception as e:
         # Catch exceptions so that we don't dump them on shell scripts
-            
+        # TODO use a custom exception rather than Exception to filter out
+        # things we didn't emit intentionally.
+
             if arguments.debug: print e
             self._fail("An error occured.")
 

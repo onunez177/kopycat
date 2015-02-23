@@ -24,9 +24,9 @@ for a passphrase.
 
 ## Security
 
-This software (and, indeed, its underlying libraries) have not been audited by
-cryptographers. This utility is not intended to protect truly secret information.
-It is meant to safegaurd sensitive information.
+This software have not been audited by cryptographers. This utility
+is not intended to protect truly secret information. It is meant to safegaurd
+sensitive information.
 
 Whats the distinction? Sensitive information is to be shared, but with a limited
 audience; its not meant to be public, but if prying eyes found it the costs would
@@ -39,13 +39,17 @@ system as well as recording it in your bash history.
 
 ## Installation
 
-For now, you can download the source from GitHub and use `pip` to install the
-dependencies.
+You'll need to install the Python development package, which is a dependency of
+PyCrypto. On Debian systems, you the package name is `python-dev`.
+
+`apt-get install python-dev`
+
+After that, download the .zip from GitHup, unzip it into your desired directory,
+and install the dependencies.
 
 `pip install -r requirements.txt`
 
-I'm going to write a propper `setup.py` and submit it to PyPi in the coming
-days.
+Now you're ready to go.
 
 ## Examples
 
@@ -73,6 +77,16 @@ All contributions are welcome! If you add a pull request, I'll review and merge
 it as soon as I can.
 
 Have a look at ROADMAP.md.
+
+## Known Issues
+
+kopy.io uses a TLS certificate for a different domain, so verification fails.
+Right now, `kopycat` simply doesn't perform verification -- opening the door
+to MitM attacks.
+
+This will eventually be fixed in `kopycay` (by assuming the certificate is static,
+which is not a fantastic solution), but I have no control of whether this is fixed
+on the server side.
 
 ## Bugs and feature requests
 
