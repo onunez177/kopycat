@@ -22,7 +22,7 @@ class Kopy(object):
     ivLength = 16
     blockSize = 16
     saltLength = 8
-    passwordRandBytes = 100
+    passwordRandBytes = 100 # this must be > the length of an md5 hash (32 bytes)
 
     saltPadding = "Salted__" # this is half a block, and the salt is half a block
     ciphertextFormat = saltPadding + "{salt}{ciphertext}" # this is then b64'd
@@ -40,13 +40,16 @@ class Kopy(object):
         self.randomness = SystemRandom()
 
     def _randomBytes(self, length):
+        """
+        Return a specified number of bytes from the OSs random facility.
+        """
 
         if length <= 0: raise Exception("length must be a positive integer.")
         return "".join([chr(self.randomness.getrandbits(8)) for i in range(length)])
 
     def _generateSalt(self):
 
-        return self._randomBytes(self.saltLength)
+        return self.generateRandomBytes(self.saltLength)
 
     def _parseCiphertext(self, ciphertext):
 
@@ -71,7 +74,7 @@ class Kopy(object):
         return b64encode(self.ciphertextFormat.format(salt=salt,
                         ciphertext=ciphertext))
 
-    def _aes(self, key, iv):
+    def _newAES(self, key, iv):
 
         return AES.new(key, AES.MODE_CBC, iv)
 
@@ -181,7 +184,7 @@ class Kopy(object):
         key, iv = self._getAESArgs(passphrase, salt)
         document = self._pad(document)
 
-        aes = self._aes(key, iv)
+        aes = self._newAES(key, iv)
         return self._formatCiphertext(salt, aes.encrypt(document))
 
     def decrypt(self, document, passphrase):
@@ -191,24 +194,30 @@ class Kopy(object):
 
         salt, ciphertext = self._parseCiphertext(document)
         key, iv = self._getAESArgs(passphrase, salt)
-        aes = self._aes(key, iv)
+        aes = self._newAES(key, iv)
         return self._unpad(aes.decrypt(ciphertext))
 
-    def generatePassword(self, length=10):
+    def generateRandomBytes(self, length=14):
         """
-        Generate a random password of an arbitrary length, made up of hexadecimal
+        Generate random output of an arbitrary length, made up of hexadecimal
         digits.
+
+        The default length is the same as kopy.io uses.
+
+        The entropy should be at its upper bound, which is 8 * length bits.
+        But I'm not a cryptographer.
         """
 
         if length <= 0: raise Exception("length must be a positive integer.")
 
-        # FIXME: Would this method actually damage our randomness if
-        # length > self.passwordRandBytes? I doubt it really adds anything for
-        # length < self.passwordRandBytes.
         output = ""
         while len(output) < length:
             output += md5(self._randomBytes(self.passwordRandBytes)).hexdigest()
         return output[:length]
+
+        # Regarding md5; the reasoning here is that its best not to expose
+        # naked output from our CSPRNG, but thats really the OSs job, so this
+        # is probably just a waste of clock cycles.
 
     def opensslKeyDerivation(self, password, salt, key_len, iv_len):
         """

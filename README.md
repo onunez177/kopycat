@@ -84,9 +84,11 @@ kopy.io uses a TLS certificate for a different domain, so verification fails.
 Right now, `kopycat` simply doesn't perform verification -- opening the door
 to MitM attacks.
 
-This will eventually be fixed in `kopycay` (by assuming the certificate is static,
+This will eventually be fixed in `kopycat` (by assuming the certificate is static,
 which is not a fantastic solution), but I have no control of whether this is fixed
 on the server side.
+
+'#' characters in passwords do not work; newlines and linefeeds can also cauce problems.
 
 ## Bugs and feature requests
 

@@ -8,6 +8,13 @@ from api.kopy import Kopy
 
 # Everything actually interesting happens in api/kopy.py
 
+class KopyException(Exception):
+
+    # This is just so we can catch exceptions emmited by the
+    # CLI seperately from others.
+
+    pass
+
 class CLI(Kopy):
 
     _kopyUrl = "kopy.io"
@@ -19,8 +26,8 @@ class CLI(Kopy):
 Upload and read encrypted or plaintext files from kopy.io.
 
 kopy.io is a pastebin with client-side encryption features. This allows you to
-share sensitive information without fear of it being snooped on or spidered.
-The cipher employed is AES-256-CBC.
+share sensitive information without fear of it being snooped on or indexed by
+search engines. The cipher employed is AES-256-CBC.
 
 kopycat and kopy.io are not suitable for secret information; proprietary
 code snippets, yes. Nuclear launch codes, not so much. gpg is a safer bet
@@ -96,7 +103,7 @@ https://www.github.com/xmnr/kopycat
 
     def _getFile(self, target):
 
-        if not isinstance(target, str): raise Exception("Bad argument (this is a bug.)")
+        if not isinstance(target, str): raise KopyException("Bad argument (this is a bug.)")
 
         dangerous = ["\r", "\n", "\x00"]
         # \r and \n can be used to fake log entries, \x00 can be used to bypass
@@ -105,17 +112,17 @@ https://www.github.com/xmnr/kopycat
 
         for i in target:
             if i in dangerous:
-                raise Exception("Filename was potentially malicious, aborting.")
+                raise KopyException("Filename was potentially malicious, aborting.")
 
         try:
             doc = open(target).read()
         except IOError as e:
             if e.errno == errno.EACCES:
-                raise Exception("You don't have permission to read {}.".format(target))
+                raise KopyException("You don't have permission to read {}.".format(target))
             elif e.errno == errno.ENOENT:
-                raise Exception("The file {} doesn't exist.".format(target))
+                raise KopyException("The file {} doesn't exist.".format(target))
             elif e.errno == errno.EISDIR:
-                raise Exception("{} is a directory.".format(target))
+                raise KopyException("{} is a directory.".format(target))
             # TODO should we fail on symlinks unless explicitly allowed?
 
         return doc
@@ -138,11 +145,11 @@ https://www.github.com/xmnr/kopycat
         try:
             quantity = int(quantity) 
         except ValueError:
-            raise Exception("Invalid paste duration: " + \
+            raise KopyException("Invalid paste duration: " + \
                             "{} is not a number.".format(quantity))
 
         if not unit in self.times:
-            raise Exception("Unknown unit of time: {}.".format(unit))
+            raise KopyException("Unknown unit of time: {}.".format(unit))
 
         return self.times[unit] * quantity
 
@@ -151,18 +158,18 @@ https://www.github.com/xmnr/kopycat
 
         url = self._chopProtocol(url)
 
-        if not "/" in url: raise Exception("Bad URL.")
+        if not "/" in url: raise KopyException("Bad URL.")
 
         chunk = url.split("/")[-1]
         if "#" in chunk:
             # FIXME support # in passphrases? urlencode them?
             documentId, passphrase = chunk.split("#")
-            if not documentId: raise Exception("Bad URL; no document ID.")
+            if not documentId: raise KopyException("Bad URL; no document ID.")
             if not passphrase: passphrase = None
         else:
             documentId = chunk
             passphrase = None
-            if not documentId: raise Exception("No document ID.")
+            if not documentId: raise KopyException("No document ID.")
 
         return documentId, passphrase
 
@@ -204,7 +211,6 @@ https://www.github.com/xmnr/kopycat
     def arguments(self):
         """
         Configure and parse arguments.
-        Returns arguments and usage function.
         """
 
         parser = argparse.ArgumentParser(description=self.description,
@@ -219,7 +225,8 @@ https://www.github.com/xmnr/kopycat
         parser.add_argument("-d", "--download", help="Document ID to download.")
         parser.add_argument("-e", "--encryption", default=False, action="store_true",
                             help="Encrypt a document before uploading, or decrypt" + \
-                            " a document after downloading.")
+                            " a document after downloading. If no other way of" + \
+                            " getting a password is specified, prompt the user for one.")
         parser.add_argument("-f", "--passphrase-file",
                             help="Read passphrase from a file.")
         parser.add_argument("-S", "--strip", default=False, action="store_true",
@@ -240,37 +247,33 @@ https://www.github.com/xmnr/kopycat
         parser.add_argument("--debug", default=False, action="store_true",
                             help="Dump exceptions to the terminal.")
 
-        return parser.parse_args(), parser.print_help
+        return parser.parse_args()
 
-    # TODO fail in a more friendly way; catch exceptions and output useful
-    # error messages. Build --debug into self._fail, not self._main.
     def main(self):
 
         try:
 
-            arguments, usage = self.arguments()
+            arguments = self.arguments()
 
             # Parse time
-
             if arguments.time:
                 arguments.keep = self.parseTime(arguments.time)
 
             # Fetch or parse passphrase
-
             passphrase = None
 
             if arguments.stdin:
                 if not arguments.target:
-                    raise Exception("target must be specified when using --stdin.")
+                    raise KopyException("target must be specified when using --stdin.")
                 passphrase = stdin.read()
             elif arguments.passphrase_file:
                 passphrase = open(arguments.passphrase_file).read()
             elif arguments.generate_passphrase:
-                passphrase = self.generatePassword()
+                passphrase = self.generateRandomBytes()
                 arguments.sharable = True
             elif arguments.encryption:
                 # Requires passphrase but none specified
-                # FIXME catch cases where this causes problems for pipes?
+                # FIXME error on cases where this causes problems for pipes?
                 passphrase = self.prompt()
 
             if passphrase and arguments.strip:
@@ -287,12 +290,22 @@ https://www.github.com/xmnr/kopycat
                 self.outputDocument(self.download(arguments.download, passphrase))
 
             else:
-                if self.kopyUrl(arguments.target):
+                if arguments.target and self.kopyUrl(arguments.target):
+
+                    # We have a target, and have inferred the user wants us to
+                    # download a document, because they gave us a kopy.io URL.
+
                     documentId, p = self.parseUrl(arguments.target)
                     if p != None: passphrase = p
                     # Should we print a warning if we overwrite password?
                     self.outputDocument(self.download(documentId, passphrase))
                 else:
+
+                    # If they gave us a target that was not a URL, we infer it is a file we should
+                    # open and read.
+                    # If they've not given us a target, then they've passed us a document from stdin
+                    # (ie, a pipe) and we've already read the contents into a the document variable.
+
                     if document == None: # document is a file
                         # There shouldn't be a way for target to be None
                         # here.
@@ -301,13 +314,14 @@ https://www.github.com/xmnr/kopycat
                                                        passphrase,
                                                        arguments.keep),
                                    passphrase if arguments.sharable else None)
-        except Exception as e:
-        # Catch exceptions so that we don't dump them on shell scripts
-        # TODO use a custom exception rather than Exception to filter out
-        # things we didn't emit intentionally.
 
-            if arguments.debug: print e
-            self._fail("An error occured.")
+        except KopyException as e:
+
+                self._fail(e.message)
+
+        except Exception as e:
+
+            self._fail("An unknown error occured.\n{}".format(e.message if arguments.debug else ""))
 
 if __name__ == "__main__":
     CLI().main()

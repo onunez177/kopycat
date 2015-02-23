@@ -111,14 +111,14 @@ class KopyTest(TestCase):
         self.assertRaises(Exception, self.k._randomBytes, 0)
         self.assertRaises(Exception, self.k._randomBytes, -1)
 
-    def testPassword(self):
+    def testGenerateRandomBytes(self):
 
-        self.assertEqual(len(self.k.generatePassword(100)), 100)
+        self.assertEqual(len(self.k.generateRandomBytes(100)), 100)
 
         # FIXME no way to differentiate this raising an exception and 
         # _randomBytes, atm
-        self.assertRaises(Exception, self.k.generatePassword, 0)
-        self.assertRaises(Exception, self.k.generatePassword, -1)
+        self.assertRaises(Exception, self.k.generateRandomBytes, 0)
+        self.assertRaises(Exception, self.k.generateRandomBytes, -1)
 
     def testSalt(self):
 
