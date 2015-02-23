@@ -87,9 +87,6 @@ class Kopy(object):
         return self.opensslKeyDerivation(passphrase, salt,
                                         self.keyLength, self.ivLength)
 
-    # FIXME the methods to interact with the API have 0 error handling.
-    # The also don't have tests.
-
     def _composeDocument(self, document, encryption, keep):
         """
         Create a dictionary to represent the document, for requests.post()'s
